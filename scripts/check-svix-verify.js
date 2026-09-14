@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
- * Prove Svix-style signature verify accepts svix-* headers.
+ * Prove Svix signature verify via official svix package (sign + verify round-trip).
  * Run: node scripts/check-svix-verify.js
  */
-const crypto = require("node:crypto");
 const path = require("node:path");
+const { Webhook } = require(path.join(__dirname, "..", "forwarder", "node_modules", "svix"));
 const handler = require(path.join(__dirname, "..", "forwarder", "api", "index.js"));
 const { verifyWebhookSignature } = handler;
 
+const crypto = require("node:crypto");
 const key = crypto.randomBytes(32);
 const secret = "whsec_" + key.toString("base64");
 const id = "msg_test_123";
@@ -18,8 +19,8 @@ const rawBody = JSON.stringify({
   message: { from: "Jeff <jhuber@gmail.com>", subject: "hi", text: "hello" },
 });
 
-const signedContent = `${id}.${timestamp}.${rawBody}`;
-const sig = crypto.createHmac("sha256", key).update(signedContent, "utf8").digest("base64");
+const wh = new Webhook(secret);
+const sig = wh.sign(id, new Date(Number(timestamp) * 1000), rawBody);
 
 function fakeReq(headers) {
   return { headers };
@@ -29,7 +30,7 @@ const ok = verifyWebhookSignature(
   fakeReq({
     "svix-id": id,
     "svix-timestamp": timestamp,
-    "svix-signature": `v1,${sig}`,
+    "svix-signature": sig,
   }),
   rawBody,
   secret
@@ -49,15 +50,28 @@ const viaWebhookHeaders = verifyWebhookSignature(
   fakeReq({
     "webhook-id": id,
     "webhook-timestamp": timestamp,
-    "webhook-signature": `v1,${sig}`,
+    "webhook-signature": sig,
   }),
   rawBody,
   secret
 );
 
-console.log(JSON.stringify({ ok, bad, viaWebhookHeaders }, null, 2));
+// Direct library round-trip (independent of our wrapper)
+let libOk = false;
+try {
+  wh.verify(rawBody, {
+    "svix-id": id,
+    "svix-timestamp": timestamp,
+    "svix-signature": sig,
+  });
+  libOk = true;
+} catch (_) {
+  libOk = false;
+}
 
-if (!ok.ok || bad.ok || !viaWebhookHeaders.ok) {
+console.log(JSON.stringify({ ok, bad, viaWebhookHeaders, libOk }, null, 2));
+
+if (!ok.ok || bad.ok || !viaWebhookHeaders.ok || !libOk) {
   console.error("FAILED svix verify checks");
   process.exit(1);
 }

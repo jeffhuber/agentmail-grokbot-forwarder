@@ -1,7 +1,6 @@
-const crypto = require("node:crypto");
+const { Webhook } = require("svix");
 const { waitUntil } = require("@vercel/functions");
 
-const MAX_SKEW_SEC = 300;
 const RATE_LIMIT_MAX = 30;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const DEDUPE_TTL_MS = 120_000;
@@ -96,42 +95,6 @@ function readRawBody(req) {
   });
 }
 
-function decodeWebhookSecret(secret) {
-  let s = String(secret).trim();
-  if (
-    (s.startsWith('"') && s.endsWith('"')) ||
-    (s.startsWith("'") && s.endsWith("'"))
-  ) {
-    s = s.slice(1, -1).trim();
-  }
-  if (s.startsWith("whsec_")) s = s.slice("whsec_".length);
-  return Buffer.from(s, "base64");
-}
-
-function timingSafeEqualB64(a, b) {
-  let ba;
-  let bb;
-  try {
-    ba = Buffer.from(String(a), "base64");
-    bb = Buffer.from(String(b), "base64");
-  } catch (_) {
-    return false;
-  }
-  if (!ba.length || ba.length !== bb.length) return false;
-  return crypto.timingSafeEqual(ba, bb);
-}
-
-function timingSafeEqualStr(a, b) {
-  if (timingSafeEqualB64(a, b)) return true;
-  const ba = Buffer.from(String(a));
-  const bb = Buffer.from(String(b));
-  if (ba.length !== bb.length) {
-    crypto.timingSafeEqual(ba, ba);
-    return false;
-  }
-  return crypto.timingSafeEqual(ba, bb);
-}
-
 /**
  * Extract bare email from AgentMail `message.from`.
  * Accepts: "email@x.com", "Name <email@x.com>", "\"Name\" <email@x.com>".
@@ -171,11 +134,10 @@ function isAllowlisted(email, allowlist) {
 }
 
 /**
- * Svix / Standard Webhooks verify (fail closed when secret is set).
+ * Svix / Standard Webhooks verify via official `svix` package (fail closed when secret is set).
  * AgentMail/Svix: svix-id, svix-timestamp, svix-signature
- * Also accept Standard Webhooks names: webhook-id, webhook-timestamp, webhook-signature
- * Signed content: `${id}.${timestamp}.${rawBody}`
- * Secret: whsec_ + base64 key material
+ * Also accept Standard Webhooks / alias names: webhook-*, Webhook-*, x-webhook-*
+ * Mapped into svix-* header names for Webhook.verify.
  */
 function verifyWebhookSignature(req, rawBody, secret) {
   const id =
@@ -199,47 +161,33 @@ function verifyWebhookSignature(req, rawBody, secret) {
     return { ok: false, reason: "missing_signature_headers" };
   }
 
-  const tsNum = Number(timestamp);
-  if (!Number.isFinite(tsNum)) {
-    return { ok: false, reason: "invalid_timestamp" };
+  let secretStr = String(secret).trim();
+  if (
+    (secretStr.startsWith('"') && secretStr.endsWith('"')) ||
+    (secretStr.startsWith("'") && secretStr.endsWith("'"))
+  ) {
+    secretStr = secretStr.slice(1, -1).trim();
   }
-  const nowSec = Math.floor(Date.now() / 1000);
-  if (Math.abs(nowSec - tsNum) > MAX_SKEW_SEC) {
-    return { ok: false, reason: "timestamp_skew" };
+  if (!secretStr) {
+    return { ok: false, reason: "invalid_secret_encoding" };
   }
 
-  let key;
   try {
-    key = decodeWebhookSecret(secret);
-  } catch (_) {
-    return { ok: false, reason: "invalid_secret_encoding" };
+    const wh = new Webhook(secretStr);
+    wh.verify(rawBody, {
+      "svix-id": id,
+      "svix-timestamp": timestamp,
+      "svix-signature": signatureHeader,
+    });
+    return { ok: true, webhookId: id };
+  } catch (err) {
+    const msg = String(err && err.message ? err.message : err).toLowerCase();
+    let reason = "signature_mismatch";
+    if (msg.includes("timestamp")) reason = "timestamp_skew";
+    else if (msg.includes("secret") || msg.includes("base64"))
+      reason = "invalid_secret_encoding";
+    return { ok: false, reason };
   }
-  if (!key.length) {
-    return { ok: false, reason: "invalid_secret_encoding" };
-  }
-
-  const signedContent = `${id}.${timestamp}.${rawBody}`;
-  const expected = crypto
-    .createHmac("sha256", key)
-    .update(signedContent, "utf8")
-    .digest("base64");
-
-  // Space-separated signatures; accept entries of form "v1,<base64>"
-  const parts = signatureHeader.trim().split(/\s+/);
-  let matched = false;
-  for (const part of parts) {
-    const m = /^v1,(.+)$/.exec(part);
-    if (!m) continue;
-    if (timingSafeEqualStr(m[1], expected)) {
-      matched = true;
-      break;
-    }
-  }
-
-  if (!matched) {
-    return { ok: false, reason: "signature_mismatch" };
-  }
-  return { ok: true, webhookId: id };
 }
 
 function pruneMap(map, now, ttlMs) {
