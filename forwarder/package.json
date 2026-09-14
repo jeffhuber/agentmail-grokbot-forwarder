@@ -1,0 +1,9 @@
+{
+  "name": "agentmail-cursor-forwarder",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Public HTTPS hop: AgentMail (Svix) webhooks → Cursor agent webhook (adds Bearer auth)",
+  "dependencies": {
+    "@vercel/functions": "^3.9.5"
+  }
+}
