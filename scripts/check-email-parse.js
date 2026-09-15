@@ -9,10 +9,10 @@ const handler = require(path.join(__dirname, "..", "forwarder", "api", "index.js
 const { extractEmail, parseAllowlist, isAllowlisted } = handler;
 
 const cases = [
-  ["jhuber@gmail.com", "jhuber@gmail.com"],
-  ["Jeff <jhuber@gmail.com>", "jhuber@gmail.com"],
-  ['"Jeff Huber" <jhuber@triatomic.ai>', "jhuber@triatomic.ai"],
-  ["  Name  <JHUBER@Gmail.COM>  ", "jhuber@gmail.com"],
+  ["you@example.com", "you@example.com"],
+  ["Operator <you@example.com>", "you@example.com"],
+  ['"Operator" <operator@example.com>', "operator@example.com"],
+  ["  Name  <YOU@Example.COM>  ", "you@example.com"],
   ["not-an-email", ""],
   ["", ""],
   [null, ""],
@@ -29,13 +29,13 @@ for (const [input, expected] of cases) {
 }
 
 const allow = parseAllowlist(
-  "jhuber@gmail.com, Jeff <jhuber@triatomic.ai>, "
+  "you@example.com, Operator <operator@example.com>, "
 );
 console.log("allowlist:", allow);
-console.log("empty deny-all:", isAllowlisted("jhuber@gmail.com", []) === false);
+console.log("empty deny-all:", isAllowlisted("you@example.com", []) === false);
 console.log(
   "match angle:",
-  isAllowlisted(extractEmail("Jeff <jhuber@gmail.com>"), allow) === true
+  isAllowlisted(extractEmail("Operator <you@example.com>"), allow) === true
 );
 console.log(
   "reject other:",

@@ -1,0 +1,159 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: forwarder/package-lock.json
+
+      - name: Install dependencies
+        working-directory: forwarder
+        run: npm ci
+
+      - name: Check email parsing logic
+        run: node scripts/check-email-parse.js
+
+      - name: Check Svix signature verification
+        run: node scripts/check-svix-verify.js
+
+  security:
+    name: Security Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: forwarder/package-lock.json
+
+      - name: Install dependencies
+        working-directory: forwarder
+        run: npm ci
+
+      - name: Run npm audit
+        working-directory: forwarder
+        run: npm audit --production
+        continue-on-error: true
+
+      - name: Check for secrets in git
+        run: |
+          echo "Checking for accidentally committed secrets..."
+          
+          # Fail if any real-looking secrets are found
+          if git grep -E "whsec_[A-Za-z0-9+/=]{32,}" -- ':(exclude).github/workflows/*.yml'; then
+            echo "ERROR: Found real-looking whsec_ secrets in git"
+            exit 1
+          fi
+          
+          if git grep -E "Bearer [A-Za-z0-9_-]{20,}" -- ':(exclude).github/workflows/*.yml'; then
+            echo "ERROR: Found real-looking Bearer tokens in git"
+            exit 1
+          fi
+          
+          if git grep -E "https://[a-z0-9-]+\.vercel\.app/api/webhook" -- ':(exclude).github/workflows/*.yml'; then
+            echo "ERROR: Found real Vercel webhook URLs in git"
+            exit 1
+          fi
+          
+          echo "No secrets found in git history."
+
+      - name: Verify fail-closed signature enforcement
+        run: |
+          echo "Verifying fail-closed security in forwarder code..."
+          
+          # Ensure empty allowlist = deny-all
+          if ! grep -q "if (!allowlist.length) return false" forwarder/api/index.js; then
+            echo "ERROR: Empty allowlist must return false (deny-all)"
+            exit 1
+          fi
+          
+          # Ensure signature verification is fail-closed
+          if ! grep -q 'if (!id || !timestamp || !signatureHeader)' forwarder/api/index.js; then
+            echo "ERROR: Missing signature headers check"
+            exit 1
+          fi
+          
+          echo "Fail-closed checks passed."
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Check file formatting
+        run: |
+          echo "Checking for common issues..."
+          
+          # Check for real emails in examples
+          if grep -r "jhuber@gmail.com\|jhuber@triatomic.ai" \
+              --include="*.js" \
+              --include="*.json" \
+              --include=".env.example" \
+              --exclude-dir=node_modules \
+              forwarder/; then
+            echo "ERROR: Found real emails in forwarder code - use example.com instead"
+            exit 1
+          fi
+          
+          # Check that .env files are gitignored
+          if ! grep -q "^\.env$" .gitignore; then
+            echo "ERROR: .env must be in .gitignore"
+            exit 1
+          fi
+          
+          if ! grep -q "^\.secrets/$" .gitignore; then
+            echo "ERROR: .secrets/ must be in .gitignore"
+            exit 1
+          fi
+          
+          echo "Lint checks passed."

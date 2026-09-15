@@ -1,8 +1,8 @@
-# agentmail-grokbot-forwarder
+# AgentMail Grok Bot Email Channel
 
-**Experimental**: Security-hardened AgentMail → Cursor Grok Bot webhook forwarder.
+> **agentmail-grokbot-email-channel** (`agentmail-cursor-forwarder`)
 
-Wire an **AgentMail** inbox to a **Grok Bot** (Cursor agent) over a durable webhook path with Svix signature verification, email allowlisting, dedupe, and light rate limiting.
+Security-hardened webhook forwarder connecting **AgentMail** inboxes to **Cursor Grok Bot** agents with signature verification, allowlisting, dedupe, and rate limiting.
 
 AgentMail delivers `message.received` via **Svix** to a public HTTPS URL. Cursor agent webhooks **require** Bearer auth. This repo’s tiny Vercel forwarder is the hop that verifies the signature, filters, ACKs AgentMail immediately, and forwards the raw body to Cursor with Bearer.
 
@@ -46,7 +46,7 @@ Copy `forwarder/.env.example` → set in Vercel → Project → Settings → Env
 |----------|---------|
 | `CURSOR_WEBHOOK_URL` | Cursor agent webhook URL |
 | `CURSOR_WEBHOOK_KEY` | Bearer token for that webhook |
-| `ALLOWLIST` | Comma-separated emails (default intended: `jhuber@gmail.com,jhuber@triatomic.ai`) |
+| `ALLOWLIST` | Comma-separated emails (example: `you@example.com,operator@example.com`) |
 | `AGENTMAIL_WEBHOOK_SECRET` | **Required**: Svix signing secret (`whsec_...`) from AgentMail webhook create |
 | `REQUIRE_AGENTMAIL_SIGNATURE` | Set to `1` (recommended) |
 | `ALLOW_UNSIGNED_WEBHOOKS` | `1` = dev only escape hatch (not for production) |
@@ -79,11 +79,49 @@ node ../scripts/check-email-parse.js
 node ../scripts/check-svix-verify.js
 ```
 
-## Docs
+## Documentation
 
-- [Architecture](docs/architecture.md)
+- [Architecture](docs/architecture.md) - How the webhook forwarder works
+- [Smoke Test Guide](docs/SMOKE_TEST.md) - Testing and validation procedures
+- [Security Policy](SECURITY.md) - Vulnerability reporting
 
-## Hygiene
+## Related Projects
 
-- No real webhook URLs, Bearer tokens, or `whsec_` secrets in git.
-- Scrub before publishing; keep secrets in Vercel env only.
+This is one of several Grok Bot communication channels:
+
+- [grokbot-imessage-skill](https://github.com/jeffhuber/grokbot-imessage-skill) - iMessage channel
+- [twilio-grok-voice-bridge](https://github.com/jeffhuber/twilio-grok-voice-bridge) - Voice channel (Twilio)
+- [linq-grokbot-text-channel](https://github.com/jeffhuber/linq-grokbot-text-channel) - SMS/RCS channel (Linq)
+- **agentmail-grokbot-email-channel** - Email channel (this repo)
+
+## What This Is Not
+
+- **Not a complete email client** - This is a webhook forwarder only. Your Cursor agent handles email operations via AgentMail MCP tools.
+- **Not for mass email** - Designed for personal assistant use cases with small allowlists.
+- **Not a standalone service** - Requires both AgentMail and Cursor agent webhook to function.
+
+## Security
+
+This forwarder implements defense-in-depth:
+
+- ✅ Webhook signature verification (Svix/Standard Webhooks) with fail-closed behavior
+- ✅ Email allowlist with deny-all default
+- ✅ Dedupe to prevent replay attacks
+- ✅ Per-sender rate limiting
+- ✅ No secrets committed to git
+- ✅ Async acknowledgment to prevent webhook storms
+
+See [SECURITY.md](SECURITY.md) for vulnerability reporting.
+
+## Contributing
+
+Contributions welcome! Please:
+
+1. Keep the fail-closed security properties intact
+2. Add tests for new filtering logic
+3. Update documentation for configuration changes
+4. Never commit real secrets or PII
+
+## License
+
+MIT License - see LICENSE file for details.

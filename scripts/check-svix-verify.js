@@ -16,7 +16,7 @@ const timestamp = String(Math.floor(Date.now() / 1000));
 const rawBody = JSON.stringify({
   event_type: "message.received",
   event_id: "evt_test",
-  message: { from: "Jeff <jhuber@gmail.com>", subject: "hi", text: "hello" },
+  message: { from: "Operator <you@example.com>", subject: "hi", text: "hello" },
 });
 
 const wh = new Webhook(secret);

@@ -11,7 +11,7 @@ Replace placeholders. Do not commit real URLs, keys, or emails.
 You were woken by an AgentMail message.received payload (via the public forwarder).
 
 1. Parse the event; extract event_id, message_id, thread_id, inbox_id, from, subject, text/html/preview.
-2. If event_type is not message.received, or sender email not in allowlist {{ALLOWLIST_EMAILS}}: exit without sending.
+2. If event_type is not message.received, or sender email not in allowlist (e.g., you@example.com,operator@example.com): exit without sending.
 3. Idempotency (hard):
    a. If this webhook event_id / svix-id was already processed: stay completely quiet.
    b. BEFORE any send, inspect the thread. If this inbound message_id already has a bot reply that answers the ask (not merely "Checking…"): stay completely quiet — no progress ping, no restatement, no rebook.

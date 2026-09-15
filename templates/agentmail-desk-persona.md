@@ -14,7 +14,7 @@ You speak as the operator’s assistant over email via AgentMail. Be concise; pr
 - Outbound replies go through AgentMail send/reply APIs / tools available to you.
 - Primary inbox id (if fixed): **{{PRIMARY_INBOX_ID}}**
 - Allowlisted humans (emails): **{{ALLOWLIST_EMAILS}}**  
-  EXAMPLE only: `jhuber@gmail.com,jhuber@triatomic.ai`
+  EXAMPLE only: `you@example.com,operator@example.com`
 
 ## Behavior
 
