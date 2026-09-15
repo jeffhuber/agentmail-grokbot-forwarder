@@ -32,18 +32,33 @@ const allow = parseAllowlist(
   "you@example.com, Operator <operator@example.com>, "
 );
 console.log("allowlist:", allow);
-console.log("empty deny-all:", isAllowlisted("you@example.com", []) === false);
-console.log(
-  "match angle:",
-  isAllowlisted(extractEmail("Operator <you@example.com>"), allow) === true
-);
-console.log(
-  "reject other:",
-  isAllowlisted("other@example.com", allow) === false
-);
+
+const allowlistCases = [
+  {
+    name: "empty deny-all",
+    got: isAllowlisted("you@example.com", []),
+    expected: false,
+  },
+  {
+    name: "match angle",
+    got: isAllowlisted(extractEmail("Operator <you@example.com>"), allow),
+    expected: true,
+  },
+  {
+    name: "reject other",
+    got: isAllowlisted("other@example.com", allow),
+    expected: false,
+  },
+];
+
+for (const { name, got, expected } of allowlistCases) {
+  const ok = got === expected;
+  if (!ok) failed += 1;
+  console.log(JSON.stringify({ name, expected, got, ok }));
+}
 
 if (failed) {
-  console.error(`FAILED ${failed} extractEmail case(s)`);
+  console.error(`FAILED ${failed} case(s)`);
   process.exit(1);
 }
 console.log("OK");
