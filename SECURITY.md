@@ -1,25 +1,10 @@
-# Security Policy
+# Security
 
-## Supported Versions
+## Vulnerability Reporting
 
-This project is experimental and actively maintained. Security updates are applied to the latest version only.
+If you discover a security vulnerability in this forwarder, please report it via [GitHub Security Advisories](https://github.com/jeffhuber/agentmail-grokbot-forwarder/security/advisories/new).
 
-## Reporting a Vulnerability
-
-If you discover a security vulnerability in this project, please report it responsibly:
-
-1. **Do not** open a public GitHub issue for security vulnerabilities.
-2. **Do** open a private [GitHub Security Advisory](https://github.com/jeffhuber/agentmail-grokbot-forwarder/security/advisories/new).
-3. Alternatively, email security concerns to: [security@example.com] (replace with your security contact).
-
-Please include:
-
-- A clear description of the vulnerability
-- Steps to reproduce (if applicable)
-- Potential impact
-- Any suggested fixes (optional)
-
-We will acknowledge receipt within 48 hours and aim to provide a fix or mitigation timeline within 7 days.
+**Do not** open a public GitHub issue for security vulnerabilities.
 
 ## Security Features
 

@@ -20,12 +20,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@0a44ba7841725637a19e28fa30b79a866c81b0a6 # v4.0.4
         with:
           node-version: '18'
           cache: 'npm'
@@ -51,12 +51,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@0a44ba7841725637a19e28fa30b79a866c81b0a6 # v4.0.4
         with:
           node-version: '18'
           cache: 'npm'
@@ -109,6 +109,13 @@ jobs:
             exit 1
           fi
           
+          # Ensure ALLOW_UNSIGNED_WEBHOOKS is ignored when webhookSecret is set
+          # Verify the code path: if (webhookSecret) { verify(); ... } else { check allowUnsigned }
+          if ! grep -q 'if (webhookSecret)' forwarder/api/index.js; then
+            echo "ERROR: Missing webhookSecret conditional check"
+            exit 1
+          fi
+          
           echo "Fail-closed checks passed."
 
   lint:
@@ -121,12 +128,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@0a44ba7841725637a19e28fa30b79a866c81b0a6 # v4.0.4
         with:
           node-version: '18'
 
@@ -134,14 +141,16 @@ jobs:
         run: |
           echo "Checking for common issues..."
           
-          # Check for real emails in examples
+          # Check for real emails in examples (widened to cover all docs/scripts/templates)
           if grep -r "jhuber@gmail.com\|jhuber@triatomic.ai" \
               --include="*.js" \
               --include="*.json" \
+              --include="*.md" \
               --include=".env.example" \
               --exclude-dir=node_modules \
-              forwarder/; then
-            echo "ERROR: Found real emails in forwarder code - use example.com instead"
+              --exclude-dir=.git \
+              README.md scripts/ templates/ docs/ forwarder/; then
+            echo "ERROR: Found real emails in codebase - use example.com instead"
             exit 1
           fi
           

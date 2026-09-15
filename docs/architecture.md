@@ -46,6 +46,8 @@ The forwarder:
 
 - Accepts `GET` (health) and `POST` (events).
 - Verifies Svix / Standard Webhooks signatures (`svix-id` / `svix-timestamp` / `svix-signature`, also `webhook-*`).
+  - **When `AGENTMAIL_WEBHOOK_SECRET` is set**: always verifies signature (fail closed). `ALLOW_UNSIGNED_WEBHOOKS` is ignored.
+  - **When `AGENTMAIL_WEBHOOK_SECRET` is unset**: rejects all webhooks unless `ALLOW_UNSIGNED_WEBHOOKS=1` is explicitly set (dev-only escape hatch).
 - Forwards **only** exact `event_type === "message.received"` (skips spam/blocked/sent/etc).
 - Extracts sender from `message.from` (`Name <email@x.com>` or bare email); matches `ALLOWLIST` case-insensitively.
 - **Empty `ALLOWLIST` = deny-all** (fail closed).
