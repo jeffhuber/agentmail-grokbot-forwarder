@@ -75,6 +75,7 @@ jobs:
         run: |
           echo "Checking for accidentally committed secrets..."
           
+          # NOTE: git grep only scans the current checkout (tip), not full git history
           # Fail if any real-looking secrets are found
           if git grep -E "whsec_[A-Za-z0-9+/=]{32,}" -- ':(exclude).github/workflows/*.yml'; then
             echo "ERROR: Found real-looking whsec_ secrets in git"

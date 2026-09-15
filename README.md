@@ -49,7 +49,7 @@ Copy `forwarder/.env.example` → set in Vercel → Project → Settings → Env
 | `ALLOWLIST` | Comma-separated emails (example: `you@example.com,operator@example.com`) |
 | `AGENTMAIL_WEBHOOK_SECRET` | **Required**: Svix signing secret (`whsec_...`) from AgentMail webhook create |
 | `REQUIRE_AGENTMAIL_SIGNATURE` | Set to `1` (recommended) |
-| `ALLOW_UNSIGNED_WEBHOOKS` | `1` = dev only escape hatch (not for production) |
+| `ALLOW_UNSIGNED_WEBHOOKS` | `1` = dev only escape hatch (not for production); ignored when secret set |
 
 Redeploy after setting env. Health check:
 
