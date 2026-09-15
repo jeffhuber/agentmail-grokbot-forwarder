@@ -40,6 +40,9 @@ jobs:
 
       - name: Check Svix signature verification
         run: node scripts/check-svix-verify.js
+      
+      - name: Check handler security validations
+        run: node scripts/check-handler-validations.js
 
   security:
     name: Security Checks
@@ -138,24 +141,10 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Check file formatting
+      - name: Check for real email addresses (PII)
         run: |
-          echo "Checking for common issues..."
-          
-          # Check that all email addresses in docs/scripts/templates/forwarder use example.com or example.org
-          # Allow intentional placeholders like CURSOR_WEBHOOK_URL= (no @), but reject non-example.com emails
-          if grep -rE '\b[A-Za-z0-9._%+-]+@(?!example\.(com|org))[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b' \
-              --include="*.js" \
-              --include="*.json" \
-              --include="*.md" \
-              --include=".env.example" \
-              --exclude-dir=node_modules \
-              --exclude-dir=.git \
-              README.md scripts/ templates/ docs/ forwarder/ 2>/dev/null; then
-            echo "ERROR: Found non-example.com email addresses in codebase"
-            echo "Only example.com or example.org addresses are allowed in documentation, scripts, and templates"
-            exit 1
-          fi
+          echo "Checking for non-example.com email addresses..."
+          node scripts/check-no-real-emails.js
           
           # Check that .env files are gitignored
           if ! grep -q "^\.env$" .gitignore; then

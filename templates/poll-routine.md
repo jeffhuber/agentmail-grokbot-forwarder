@@ -17,7 +17,7 @@ You are scheduled to poll your AgentMail inbox on weekday mornings (M-F, ~9 AM o
    a. Extract the latest inbound message_id.
    b. BEFORE replying, inspect the thread. If that message_id already has a bot reply: skip (dedupe).
    c. If webhook already handled it: skip.
-   d. Draft reply per desk persona.
+   d. Draft reply per agent persona.
    e. Send reply via AgentMail.
    f. ONLY AFTER send succeeds: update last-seen to that message_id / timestamp.
 4. If send fails: leave last-seen unchanged; log the error.
@@ -83,5 +83,5 @@ Only reply to messages from allowlisted email addresses. Non-allowlisted senders
 ## Notes
 
 - Replace `{{INBOX_ADDRESS}}` and `{{ALLOWLIST_EMAILS}}` with your actual values.
-- Combine with `agentmail-desk-persona.md` and `webhook-routine.md` for complete coverage.
+- Combine with agent persona template and `webhook-routine.md` for complete coverage.
 - Webhook is real-time; polling is backup. Do not duplicate replies.

@@ -12,7 +12,7 @@ AgentMail (message.received, Svix-signed)
     → Cursor agent webhook (Bearer)
 ```
 
-The forwarder **ACKs AgentMail immediately** (`async: true`) and forwards to Cursor via Vercel `waitUntil`. If it awaited Cursor before responding, AgentMail would redeliver the same `svix-id` / `event_id` during long agent wakes and the desk would answer repeatedly.
+The forwarder **ACKs AgentMail immediately** (`async: true`) and forwards to Cursor via Vercel `waitUntil`. If it awaited Cursor before responding, AgentMail would redeliver the same `svix-id` / `event_id` during long agent wakes and the agent would answer repeatedly.
 
 ## Security features
 
@@ -23,7 +23,7 @@ The forwarder **ACKs AgentMail immediately** (`async: true`) and forwards to Cur
 
 2. **Event filter** — only exact `event_type === "message.received"` (not spam/blocked/sent/…).
 
-3. **Email allowlist** — `ALLOWLIST` comma-separated emails; parses `Name <email@x.com>`; case-insensitive. **Empty allowlist = deny-all**.
+3. **Email allowlist** — `ALLOWLIST` comma-separated emails; parses `Name <user@example.com>`; case-insensitive. **Empty allowlist = deny-all**.
 
 4. **Dedupe** — `svix-id` then `event_id` (in-memory TTL ~2 min).
 
@@ -67,10 +67,10 @@ curl -s https://YOUR_DEPLOYMENT/
 2. Create AgentMail webhook pointing at `https://YOUR_DEPLOYMENT/` for `message.received` only.
 3. Store the returned `whsec_...` as `AGENTMAIL_WEBHOOK_SECRET` and redeploy if created after first deploy.
 
-### 3. Desk persona + webhook routine
+### 3. Agent persona + webhook routine templates
 
-- [`templates/agentmail-desk-persona.md`](templates/agentmail-desk-persona.md)
-- [`templates/webhook-routine.md`](templates/webhook-routine.md)
+- [`templates/agentmail-desk-persona.md`](templates/agentmail-desk-persona.md) - Sample agent persona
+- [`templates/webhook-routine.md`](templates/webhook-routine.md) - Webhook handling routine
 
 ### 4. Local checks
 

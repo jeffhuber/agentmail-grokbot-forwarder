@@ -121,7 +121,7 @@ function readRawBody(req) {
 
 /**
  * Extract bare email from AgentMail `message.from`.
- * Accepts: "email@x.com", "Name <email@x.com>", "\"Name\" <email@x.com>".
+ * Accepts: "user@example.com", "Name <user@example.com>", "\"Name\" <user@example.com>".
  * Returns lowercase email or "".
  */
 function extractEmail(from) {
