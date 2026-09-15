@@ -326,6 +326,29 @@ async function handler(req, res) {
     return;
   }
 
+  // Validate Content-Length matches actual body size (when header is present).
+  // Fail closed with 4xx before signature verification to prevent platform 500.
+  if (contentLength) {
+    const declaredLength = parseInt(contentLength, 10);
+    const actualLength = Buffer.byteLength(raw, "utf8");
+    if (!isNaN(declaredLength) && declaredLength !== actualLength) {
+      console.info(
+        JSON.stringify({
+          evt: "webhook_reject",
+          reason: "content_length_mismatch",
+          declaredLength,
+          actualLength,
+        })
+      );
+      json(res, 400, {
+        error: "content_length_mismatch",
+        declared: declaredLength,
+        actual: actualLength,
+      });
+      return;
+    }
+  }
+
   // Signature verify when AGENTMAIL_WEBHOOK_SECRET is set (fail closed).
   // If unset: 401 unless ALLOW_UNSIGNED_WEBHOOKS=1 (explicit escape hatch).
   // REQUIRE_AGENTMAIL_SIGNATURE=1 reinforces fail-closed when secret is present.
