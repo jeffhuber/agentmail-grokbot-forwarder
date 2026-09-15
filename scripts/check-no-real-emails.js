@@ -11,13 +11,13 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 // Email regex that matches typical email addresses
-const EMAIL_REGEX = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
+const EMAIL_REGEX = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
 
 // Allowed domains (case-insensitive)
 const ALLOWED_DOMAINS = ["example.com", "example.org"];
 
 // Directories to scan
-const SCAN_DIRS = ["README.md", "scripts", "templates", "docs", "forwarder"];
+const SCAN_DIRS = ["README.md", "SECURITY.md", "LICENSE", "scripts", "templates", "docs", "forwarder"];
 
 // File extensions to check
 const EXTENSIONS = [".js", ".json", ".md", ".example"];
