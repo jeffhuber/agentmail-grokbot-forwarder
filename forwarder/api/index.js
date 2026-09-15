@@ -35,8 +35,10 @@ function header(req, name) {
  * module.exports.config.api.bodyParser is Next.js-only and is ignored here.
  *
  * Enforces MAX_BODY_SIZE_BYTES limit to prevent resource exhaustion.
+ * When expectedLength is provided, validates received bytes match Content-Length
+ * and sets timeout to prevent hanging on incomplete bodies.
  */
-function readRawBody(req) {
+function readRawBody(req, expectedLength) {
   if (typeof req.rawBody === "string") {
     if (Buffer.byteLength(req.rawBody, "utf8") > MAX_BODY_SIZE_BYTES) {
       return Promise.reject(new Error("body_too_large"));
@@ -54,9 +56,24 @@ function readRawBody(req) {
     const chunks = [];
     let totalBytes = 0;
     let settled = false;
+    let bodyReadTimeout = null;
+    
+    const cleanup = () => {
+      if (bodyReadTimeout) {
+        clearTimeout(bodyReadTimeout);
+        bodyReadTimeout = null;
+      }
+      req.removeListener("data", onData);
+      req.removeListener("end", onEnd);
+      req.removeListener("error", onError);
+      req.removeListener("aborted", onAborted);
+      req.removeListener("close", onClose);
+    };
+    
     const done = (err, value) => {
       if (settled) return;
       settled = true;
+      cleanup();
       if (err) reject(err);
       else resolve(value);
     };
@@ -65,9 +82,6 @@ function readRawBody(req) {
       const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       totalBytes += buf.length;
       if (totalBytes > MAX_BODY_SIZE_BYTES) {
-        req.removeListener("data", onData);
-        req.removeListener("end", onEnd);
-        req.removeListener("error", onError);
         if (req.destroy && typeof req.destroy === "function") {
           req.destroy();
         }
@@ -76,7 +90,14 @@ function readRawBody(req) {
       }
       chunks.push(buf);
     };
+    
     const onEnd = () => {
+      // Validate Content-Length match when expectedLength is provided
+      if (expectedLength != null && !isNaN(expectedLength) && totalBytes !== expectedLength) {
+        done(new Error("content_length_mismatch"));
+        return;
+      }
+      
       if (chunks.length > 0) {
         done(null, Buffer.concat(chunks).toString("utf8"));
         return;
@@ -105,11 +126,40 @@ function readRawBody(req) {
       }
       done(null, "");
     };
+    
     const onError = (err) => done(err || new Error("raw_body_read_failed"));
+    
+    const onAborted = () => {
+      // Request aborted before body completed - check if we got expected bytes
+      if (expectedLength != null && !isNaN(expectedLength) && totalBytes < expectedLength) {
+        done(new Error("body_incomplete"));
+      } else {
+        done(new Error("request_aborted"));
+      }
+    };
+    
+    const onClose = () => {
+      // Connection closed prematurely - check if we got expected bytes
+      if (!settled && expectedLength != null && !isNaN(expectedLength) && totalBytes < expectedLength) {
+        done(new Error("body_incomplete"));
+      }
+    };
 
     req.on("data", onData);
     req.on("end", onEnd);
     req.on("error", onError);
+    req.on("aborted", onAborted);
+    req.on("close", onClose);
+    
+    // Set timeout when Content-Length is present to prevent hanging on incomplete bodies
+    if (expectedLength != null && !isNaN(expectedLength) && expectedLength > 0) {
+      const BODY_READ_TIMEOUT_MS = 5000; // 5 seconds
+      bodyReadTimeout = setTimeout(() => {
+        if (!settled && totalBytes < expectedLength) {
+          done(new Error("body_read_timeout"));
+        }
+      }, BODY_READ_TIMEOUT_MS);
+    }
 
     if (typeof req.readableEnded === "boolean" && req.readableEnded && chunks.length === 0) {
       setImmediate(() => {
@@ -296,9 +346,12 @@ async function handler(req, res) {
     ? String(process.env.AGENTMAIL_INBOX_ID).trim()
     : "";
 
+  // Parse Content-Length for body validation (passed to readRawBody)
+  const expectedLength = contentLength ? parseInt(contentLength, 10) : null;
+
   let raw;
   try {
-    raw = await readRawBody(req);
+    raw = await readRawBody(req, expectedLength);
   } catch (err) {
     const errMsg = String(err && err.message ? err.message : err);
     if (errMsg.includes("body_too_large")) {
@@ -312,6 +365,29 @@ async function handler(req, res) {
       json(res, 413, {
         error: "body_too_large",
         max_bytes: MAX_BODY_SIZE_BYTES,
+      });
+      return;
+    }
+    // Handle incomplete body / Content-Length mismatch errors
+    if (
+      errMsg.includes("body_incomplete") ||
+      errMsg.includes("content_length_mismatch") ||
+      errMsg.includes("body_read_timeout")
+    ) {
+      console.info(
+        JSON.stringify({
+          evt: "webhook_reject",
+          reason: errMsg.includes("body_incomplete") ? "body_incomplete" :
+                  errMsg.includes("content_length_mismatch") ? "content_length_mismatch" :
+                  "body_read_timeout",
+          expectedLength: expectedLength || undefined,
+        })
+      );
+      json(res, 400, {
+        error: errMsg.includes("body_incomplete") ? "body_incomplete" :
+               errMsg.includes("content_length_mismatch") ? "content_length_mismatch" :
+               "body_read_timeout",
+        message: "Request body does not match declared Content-Length",
       });
       return;
     }
