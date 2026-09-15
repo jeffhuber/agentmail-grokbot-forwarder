@@ -1,8 +1,8 @@
-# AgentMail Grok Bot Email Channel
+# AgentMail Grok Bot Forwarder
 
-> **agentmail-grokbot-email-channel** (`agentmail-cursor-forwarder`)
+> **agentmail-grokbot-forwarder** (Vercel service: `agentmail-cursor-forwarder`)
 
-Security-hardened webhook forwarder connecting **AgentMail** inboxes to **Cursor Grok Bot** agents with signature verification, allowlisting, dedupe, and rate limiting.
+Webhook forwarder connecting **AgentMail** inboxes to **Cursor Grok Bot** agents with signature verification, allowlisting, dedupe, and rate limiting.
 
 AgentMail delivers `message.received` via **Svix** to a public HTTPS URL. Cursor agent webhooks **require** Bearer auth. This repo’s tiny Vercel forwarder is the hop that verifies the signature, filters, ACKs AgentMail immediately, and forwards the raw body to Cursor with Bearer.
 
@@ -49,6 +49,7 @@ Copy `forwarder/.env.example` → set in Vercel → Project → Settings → Env
 | `ALLOWLIST` | Comma-separated emails (example: `you@example.com,operator@example.com`) |
 | `AGENTMAIL_WEBHOOK_SECRET` | **Required**: Svix signing secret (`whsec_...`) from AgentMail webhook create |
 | `REQUIRE_AGENTMAIL_SIGNATURE` | Set to `1` (recommended) |
+| `AGENTMAIL_INBOX_ID` | Optional: Specific inbox ID for defense-in-depth (validated when secret is set) |
 | `ALLOW_UNSIGNED_WEBHOOKS` | `1` = dev only escape hatch (not for production); ignored when secret set |
 
 Redeploy after setting env. Health check:
@@ -92,7 +93,7 @@ This is one of several Grok Bot communication channels:
 - [grokbot-imessage-skill](https://github.com/jeffhuber/grokbot-imessage-skill) - iMessage channel
 - [twilio-grok-voice-bridge](https://github.com/jeffhuber/twilio-grok-voice-bridge) - Voice channel (Twilio)
 - [linq-grokbot-text-channel](https://github.com/jeffhuber/linq-grokbot-text-channel) - SMS/RCS channel (Linq)
-- **agentmail-grokbot-email-channel** - Email channel (this repo)
+- [agentmail-grokbot-forwarder](https://github.com/jeffhuber/agentmail-grokbot-forwarder) - Email channel (this repo)
 
 ## What This Is Not
 
@@ -102,16 +103,20 @@ This is one of several Grok Bot communication channels:
 
 ## Security
 
-This forwarder implements defense-in-depth:
+This forwarder implements multiple security layers:
 
 - ✅ Webhook signature verification (Svix/Standard Webhooks) with fail-closed behavior
-- ✅ Email allowlist with deny-all default
-- ✅ Dedupe to prevent replay attacks
-- ✅ Per-sender rate limiting
+- ✅ Email allowlist with deny-all default (filters on AgentMail `From` header; see [SECURITY.md](SECURITY.md) for trust model)
+- ✅ In-memory dedupe (per-isolate; primary replay protection via Svix timestamp window)
+- ✅ Per-sender rate limiting (per-isolate)
+- ✅ Request body size limits
+- ✅ Optional inbox ID binding
 - ✅ No secrets committed to git
 - ✅ Async acknowledgment to prevent webhook storms
 
-See [SECURITY.md](SECURITY.md) for vulnerability reporting.
+**Note**: This forwarder passes the full AgentMail JSON payload (including all headers and body content) to your Cursor agent webhook by design. It is not a privacy filter, only an authentication and authorization hop.
+
+See [SECURITY.md](SECURITY.md) for the complete threat model and vulnerability reporting.
 
 ## Contributing
 

@@ -4,6 +4,7 @@ const { waitUntil } = require("@vercel/functions");
 const RATE_LIMIT_MAX = 30;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const DEDUPE_TTL_MS = 120_000;
+const MAX_BODY_SIZE_BYTES = 2_097_152; // 2 MB
 
 /** @type {Map<string, number[]>} */
 const forwardBuckets = new Map();
@@ -32,15 +33,26 @@ function header(req, name) {
  * req.on('data'|'end') / req.read. `for await` of that stream hangs or yields
  * nothing — use data/end. Do not access req.body before reading (lazy JSON parse).
  * module.exports.config.api.bodyParser is Next.js-only and is ignored here.
+ *
+ * Enforces MAX_BODY_SIZE_BYTES limit to prevent resource exhaustion.
  */
 function readRawBody(req) {
-  if (typeof req.rawBody === "string") return Promise.resolve(req.rawBody);
+  if (typeof req.rawBody === "string") {
+    if (Buffer.byteLength(req.rawBody, "utf8") > MAX_BODY_SIZE_BYTES) {
+      return Promise.reject(new Error("body_too_large"));
+    }
+    return Promise.resolve(req.rawBody);
+  }
   if (Buffer.isBuffer(req.rawBody)) {
+    if (req.rawBody.length > MAX_BODY_SIZE_BYTES) {
+      return Promise.reject(new Error("body_too_large"));
+    }
     return Promise.resolve(req.rawBody.toString("utf8"));
   }
 
   return new Promise((resolve, reject) => {
     const chunks = [];
+    let totalBytes = 0;
     let settled = false;
     const done = (err, value) => {
       if (settled) return;
@@ -50,7 +62,19 @@ function readRawBody(req) {
     };
 
     const onData = (chunk) => {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      totalBytes += buf.length;
+      if (totalBytes > MAX_BODY_SIZE_BYTES) {
+        req.removeListener("data", onData);
+        req.removeListener("end", onEnd);
+        req.removeListener("error", onError);
+        if (req.destroy && typeof req.destroy === "function") {
+          req.destroy();
+        }
+        done(new Error("body_too_large"));
+        return;
+      }
+      chunks.push(buf);
     };
     const onEnd = () => {
       if (chunks.length > 0) {
@@ -197,13 +221,16 @@ function pruneMap(map, now, ttlMs) {
   }
 }
 
-function isDuplicate(id) {
+function checkDuplicate(id) {
   if (!id) return false;
   const now = Date.now();
   pruneMap(seenIds, now, DEDUPE_TTL_MS);
-  if (seenIds.has(id)) return true;
-  seenIds.set(id, now);
-  return false;
+  return seenIds.has(id);
+}
+
+function recordDedupe(id) {
+  if (!id) return;
+  seenIds.set(id, Date.now());
 }
 
 function isRateLimited(key) {
@@ -237,6 +264,27 @@ async function handler(req, res) {
     return;
   }
 
+  // Early Content-Length check to reject oversized requests before reading body
+  const contentLength = header(req, "content-length");
+  if (contentLength) {
+    const len = parseInt(contentLength, 10);
+    if (!isNaN(len) && len > MAX_BODY_SIZE_BYTES) {
+      console.info(
+        JSON.stringify({
+          evt: "webhook_reject",
+          reason: "body_too_large",
+          contentLength: len,
+          maxAllowed: MAX_BODY_SIZE_BYTES,
+        })
+      );
+      json(res, 413, {
+        error: "body_too_large",
+        max_bytes: MAX_BODY_SIZE_BYTES,
+      });
+      return;
+    }
+  }
+
   const cursorUrl = process.env.CURSOR_WEBHOOK_URL;
   const cursorKey = process.env.CURSOR_WEBHOOK_KEY;
   const webhookSecret = process.env.AGENTMAIL_WEBHOOK_SECRET;
@@ -244,16 +292,34 @@ async function handler(req, res) {
     process.env.REQUIRE_AGENTMAIL_SIGNATURE === "1" ||
     process.env.REQUIRE_AGENTMAIL_SIGNATURE === "true";
   const allowlist = parseAllowlist(process.env.ALLOWLIST);
+  const requiredInboxId = process.env.AGENTMAIL_INBOX_ID
+    ? String(process.env.AGENTMAIL_INBOX_ID).trim()
+    : "";
 
   let raw;
   try {
     raw = await readRawBody(req);
   } catch (err) {
+    const errMsg = String(err && err.message ? err.message : err);
+    if (errMsg.includes("body_too_large")) {
+      console.info(
+        JSON.stringify({
+          evt: "webhook_reject",
+          reason: "body_too_large",
+          maxAllowed: MAX_BODY_SIZE_BYTES,
+        })
+      );
+      json(res, 413, {
+        error: "body_too_large",
+        max_bytes: MAX_BODY_SIZE_BYTES,
+      });
+      return;
+    }
     console.error(
       JSON.stringify({
         evt: "webhook_reject",
         reason: "raw_body_unavailable",
-        error: String(err && err.message ? err.message : err),
+        error: errMsg,
       })
     );
     json(res, 400, { error: "raw_body_unavailable" });
@@ -323,6 +389,15 @@ async function handler(req, res) {
   const msg = body.message || (body.data && body.data.message) || {};
   const fromRaw = msg.from || body.from || null;
   const senderEmail = extractEmail(fromRaw);
+  
+  // Extract inbox_id from multiple possible locations in payload
+  const inboxId = 
+    msg.inbox_id || 
+    msg.inboxId || 
+    body.inbox_id || 
+    body.inboxId ||
+    (body.data && (body.data.inbox_id || body.data.inboxId)) || 
+    "";
 
   if (!isMessageReceived) {
     console.info(
@@ -340,6 +415,29 @@ async function handler(req, res) {
       eventType,
     });
     return;
+  }
+  
+  // Inbox ID validation (when AGENTMAIL_INBOX_ID is set in production)
+  if (requiredInboxId && webhookSecret) {
+    const actualInboxId = String(inboxId).trim();
+    if (actualInboxId !== requiredInboxId) {
+      console.info(
+        JSON.stringify({
+          evt: "webhook_skip",
+          reason: "inbox_mismatch",
+          eventType,
+          hasInboxId: Boolean(actualInboxId),
+          rawBodyLen: raw.length,
+        })
+      );
+      json(res, 200, {
+        ok: true,
+        skipped: true,
+        reason: "inbox_mismatch",
+        eventType,
+      });
+      return;
+    }
   }
 
   // Missing sender: fail closed with 200 so AgentMail does not retry forever.
@@ -402,7 +500,14 @@ async function handler(req, res) {
     return;
   }
 
-  // Dedupe on svix-id then event_id (after verify + allowlist, before forward).
+  // Validate Cursor env BEFORE dedupe recording (misconfig must not mark seen)
+  if (!cursorUrl || !cursorKey) {
+    json(res, 500, { error: "missing_cursor_env" });
+    return;
+  }
+
+  // Check for duplicate (after verify + allowlist + inbox + Cursor env, before recording).
+  // Do NOT record dedupe ID until after all validations pass.
   const eventId =
     body.event_id ||
     body.id ||
@@ -413,7 +518,7 @@ async function handler(req, res) {
     header(req, "svix-id") ||
     header(req, "webhook-id") ||
     (eventId != null ? String(eventId) : "");
-  if (dedupeKey && isDuplicate(dedupeKey)) {
+  if (dedupeKey && checkDuplicate(dedupeKey)) {
     json(res, 200, {
       ok: true,
       skipped: true,
@@ -434,9 +539,9 @@ async function handler(req, res) {
     return;
   }
 
-  if (!cursorUrl || !cursorKey) {
-    json(res, 500, { error: "missing_cursor_env" });
-    return;
+  // All validations passed - record dedupe before forwarding
+  if (dedupeKey) {
+    recordDedupe(dedupeKey);
   }
 
   // ACK AgentMail immediately so it does not redeliver while Cursor wakes.
@@ -476,7 +581,8 @@ async function handler(req, res) {
 
   json(res, 200, {
     ok: true,
-    forwarded: true,
+    accepted: true,
+    queued: true,
     async: true,
   });
 }

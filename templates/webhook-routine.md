@@ -39,5 +39,5 @@ Right:  see message → send → confirm → THEN bump last-seen
 ## C. Optional: health / dry-run notes for operators
 
 - Forwarder `GET /` should return `{ "ok": true, "service": "agentmail-cursor-forwarder", "async": true }`.
-- Do not register the AgentMail webhook until Cursor desk webhook URL + key are available.
+- Do not register the AgentMail webhook until your Cursor agent webhook URL and key are available from the webhook routine panel.
 - EXAMPLE forwarder URL shape only: `https://YOUR_PROJECT.vercel.app/`
