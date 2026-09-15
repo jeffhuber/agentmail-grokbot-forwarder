@@ -35,7 +35,7 @@ Operator asked you to "check email" or "poll inbox" manually.
 2. For each thread with unread messages from allowlisted senders:
    a. Extract latest inbound message_id.
    b. BEFORE replying, inspect the thread. If message_id already has a bot reply: skip.
-   c. Draft reply per desk persona.
+   c. Draft reply per agent persona.
    d. Send reply via AgentMail.
    e. ONLY AFTER send succeeds: update last-seen to that message_id / timestamp.
 3. If send fails: leave last-seen unchanged; log the error.

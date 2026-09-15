@@ -59,9 +59,9 @@ curl -s https://YOUR_DEPLOYMENT/
 # → {"ok":true,"service":"agentmail-cursor-forwarder","async":true}
 ```
 
-### 2. Register AgentMail webhook (later — needs desk Cursor webhook + secret)
+### 2. Register AgentMail webhook (requires Cursor agent webhook credentials)
 
-**Do not invent Cursor credentials.** Once Chet/desk provides Cursor webhook URL + key, and you have set `AGENTMAIL_WEBHOOK_SECRET` from AgentMail’s create response:
+**Do not invent Cursor credentials.** Once you have obtained your Cursor agent webhook URL and key from the webhook routine panel, and you have set `AGENTMAIL_WEBHOOK_SECRET` from AgentMail’s create response:
 
 1. Set Vercel env (`CURSOR_*`, `ALLOWLIST`, `AGENTMAIL_WEBHOOK_SECRET`, `REQUIRE_AGENTMAIL_SIGNATURE=1`).
 2. Create AgentMail webhook pointing at `https://YOUR_DEPLOYMENT/` for `message.received` only.
@@ -69,7 +69,7 @@ curl -s https://YOUR_DEPLOYMENT/
 
 ### 3. Agent persona + webhook routine templates
 
-- [`templates/agentmail-desk-persona.md`](templates/agentmail-desk-persona.md) - Sample agent persona
+- [`templates/agentmail-agent-persona.md`](templates/agentmail-agent-persona.md) - Sample agent persona
 - [`templates/webhook-routine.md`](templates/webhook-routine.md) - Webhook handling routine
 
 ### 4. Local checks
